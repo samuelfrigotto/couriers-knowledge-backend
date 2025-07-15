@@ -45,3 +45,65 @@ exports.refreshEvaluatedPlayerNames = async (req, res) => {
         res.status(500).json({ message: 'Erro interno do servidor.' });
     }
 };
+
+exports.getUserStats = async (req, res) => {
+    const authorId = req.user.id;
+    const userSteamId = req.user.steam_id;
+
+    try {
+        // 1. Busca de dados do nosso banco
+        const evaluationsQuery = db.query('SELECT rating, tags FROM evaluations WHERE author_id = $1', [authorId]);
+        const userQuery = db.query('SELECT steam_username, avatar_url, created_at FROM users WHERE id = $1', [authorId]);
+
+        // 2. Busca de dados da API da OpenDota
+        const matchHistoryQuery = steamService.getMatchHistory(userSteamId, 20); // Pega as últimas 20 partidas
+
+        // Executa todas as buscas em paralelo para otimizar o tempo
+        const [evaluationsResult, userResult, matchHistory] = await Promise.all([evaluationsQuery, userQuery, matchHistoryQuery]);
+
+        const evaluations = evaluationsResult.rows;
+        const user = userResult.rows[0];
+
+        // 3. Calcula as estatísticas
+        let totalEvaluations = evaluations.length;
+        let averageRating = 0;
+        if (totalEvaluations > 0) {
+            const sumOfRatings = evaluations.reduce((sum, e) => sum + e.rating, 0);
+            averageRating = parseFloat((sumOfRatings / totalEvaluations).toFixed(2));
+        }
+
+        const tagCounts = evaluations.flatMap(e => e.tags || []).reduce((acc, tag) => {
+            acc[tag] = (acc[tag] || 0) + 1;
+            return acc;
+        }, {});
+        const mostUsedTags = Object.entries(tagCounts).sort(([,a],[,b]) => b-a).slice(0, 5).map(([tag]) => tag);
+
+        const winsLast20 = matchHistory.filter(m => (m.player_slot < 128 && m.radiant_win) || (m.player_slot >= 128 && !m.radiant_win)).length;
+
+        const heroCounts = matchHistory.reduce((acc, match) => {
+            acc[match.hero_id] = (acc[match.hero_id] || 0) + 1;
+            return acc;
+        }, {});
+        const mostUsedHeroId = Object.entries(heroCounts).sort(([,a],[,b]) => b-a)[0]?.[0];
+
+        // 4. Monta o objeto de resposta final
+        const stats = {
+            steamUsername: user.steam_username,
+            avatarUrl: user.avatar_url,
+            accountCreatedAt: user.created_at,
+            accountStatus: 'Free', // Futuramente, podemos mudar isso
+            totalEvaluations,
+            averageRating,
+            mostUsedTags,
+            winsLast20,
+            mostUsedHeroId: mostUsedHeroId ? parseInt(mostUsedHeroId) : null
+        };
+
+        res.status(200).json(stats);
+
+    } catch (error) {
+        console.error('Erro ao buscar estatísticas do usuário:', error);
+        res.status(500).json({ message: 'Erro interno do servidor.' });
+    }
+};
+

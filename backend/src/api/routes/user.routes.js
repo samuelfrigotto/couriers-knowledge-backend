@@ -10,6 +10,7 @@ const authMiddleware = require('../../middlewares/auth.middleware');
 router.get('/users/me', authMiddleware.verifyToken, userController.getMyProfile);
 // NOVA ROTA POST para iniciar a atualização
 router.post('/users/me/refresh-names', authMiddleware.verifyToken, userController.refreshEvaluatedPlayerNames);
+router.get('/users/me/stats', authMiddleware.verifyToken, userController.getUserStats);
 
 
 module.exports = router;
