@@ -20,6 +20,8 @@ router.put('/evaluations/:id', authMiddleware.verifyToken, evaluationController.
 // Apaga uma avaliação específica (pelo seu ID)
 router.delete('/evaluations/:id', authMiddleware.verifyToken, evaluationController.deleteEvaluation);
 
+// NOVA ROTA GET para buscar as tags
+router.get('/evaluations/tags', authMiddleware.verifyToken, evaluationController.getUniqueTags);
 
 
 

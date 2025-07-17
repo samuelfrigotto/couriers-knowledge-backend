@@ -4,9 +4,23 @@ const steamService = require('../services/steam.service');
 
 exports.createEvaluation = async (req, res) => {
     const authorId = req.user.id;
-    // Adicionando os novos campos do corpo da requisição
     const { targetSteamId, rating, notes, matchId, role, hero_id, tags } = req.body;
 
+    // --- INÍCIO DA VALIDAÇÃO ---
+    if (notes && notes.length > 200) {
+        return res.status(400).json({ message: 'A anotação não pode exceder 200 caracteres.' });
+    }
+    if (tags) {
+        if (tags.length > 5) {
+            return res.status(400).json({ message: 'Você pode adicionar no máximo 5 tags.' });
+        }
+        for (const tag of tags) {
+            if (tag.length > 25) {
+                return res.status(400).json({ message: 'Cada tag não pode exceder 25 caracteres.' });
+            }
+        }
+    }
+    
     if (!targetSteamId) {
         return res.status(400).json({ message: 'targetSteamId is required.' });
     }
@@ -135,5 +149,24 @@ exports.deleteEvaluation = async (req, res) => {
     } catch (error) {
         console.error('Error deleting evaluation:', error);
         res.status(500).json({ message: 'Internal server error', error: error.message });
+    }
+};
+
+exports.getUniqueTags = async (req, res) => {
+    const authorId = req.user.id;
+    try {
+        // A query usa UNNEST para transformar os arrays de tags em linhas e depois pega os valores distintos
+        const query = `
+            SELECT DISTINCT UNNEST(tags) AS tag 
+            FROM evaluations 
+            WHERE author_id = $1 AND tags IS NOT NULL
+            ORDER BY tag;
+        `;
+        const { rows } = await db.query(query, [authorId]);
+        // Mapeia o resultado para um array simples de strings
+        res.status(200).json(rows.map(r => r.tag));
+    } catch (error) {
+        console.error('Erro ao buscar tags únicas:', error);
+        res.status(500).json({ message: 'Erro interno do servidor.' });
     }
 };
